@@ -24,6 +24,8 @@
 var fs = require('fs');
 var program = require('commander');
 var cheerio = require('cheerio');
+var rest = require('restler');
+var request = require('request');
 var HTMLFILE_DEFAULT = "index.html";
 var CHECKSFILE_DEFAULT = "checks.json";
 
@@ -37,6 +39,29 @@ var assertFileExists = function(infile) {
     }
     return instr;
 };
+
+// KNOWN ISSUE:
+// Must run this program TWICE to achieve correct results!!
+// This is because rest.get(..) is ASYNCHRONOUS and so checkHtmlFile is called BEFORE rest.get(..) finishes
+var assertURLExists = function(url) {
+    if(!fs.existsSync("temp.txt")) {
+	console.log("temp.txt does not exist! Creating.");
+	fs.writeFileSync("temp.txt", "");
+    }
+
+    rest.get(url).on('complete', function(result) {
+		 if(result instanceof Error) {
+		     console.log("%s error retrieving document", url);
+		     process.exit(1);
+		 }
+		 else {
+		     console.log("Writing %s to temp file", "temp");
+		     fs.writeFileSync("temp.txt", result);
+		 }
+	     });
+    
+    return url;
+}
 
 var cheerioHtmlFile = function(htmlfile) {
     
@@ -74,11 +99,14 @@ if(require.main == module) {
     program
         .option('-c, --checks <check_file>', 'Path to checks.json', clone(assertFileExists), CHECKSFILE_DEFAULT)
         .option('-f, --file <html_file>', 'Path to index.html', clone(assertFileExists), HTMLFILE_DEFAULT)
+        .option('-u, --url <url>', 'URL to document', clone(assertURLExists))
         .parse(process.argv);
+    if(program.url) {
+	program.file="temp.txt";
+    }
     var checkJson = checkHtmlFile(program.file, program.checks);
     var outJson = JSON.stringify(checkJson, null, 4);
     console.log(outJson);
 } else {
-    
     exports.checkHtmlFile = checkHtmlFile;
 }
